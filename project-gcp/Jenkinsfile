@@ -1,0 +1,86 @@
+pipeline {
+    agent none
+    environment {
+        GOOGLE_CREDENTIALS = credentials('ORG_BOOTSTRAP_GOOGLE_CREDENTIALS')
+    }
+    stages {
+        stage ("Initializing") {
+            agent {
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terragcloud:0.11.7-B2'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                }
+            }
+            environment {
+                TF_VAR_credentials_path = credentials('ORG_BOOTSTRAP_GOOGLE_CREDENTIALS_FILE')
+            }
+            steps {
+                script {
+                    def directories = ["projects","folders","shared-vpc", "iam"]
+                    for (directory in directories) {
+                        returnCode = terraformPlan("${directory}")
+                        if (returnCode && returnCode != 0) {
+                            stage ("Manual Judgement for ${directory}") {
+                                timeout(time:45, unit:'MINUTES') {
+                                    input("Proceed to Terraform Apply on ${directory}?")
+                                }
+                            }
+                            stage ("Apply ${directory}") {
+                                script {
+                                    terraformApply("${directory}")
+                                }
+                            }
+                        }
+                        sh 'mkdir -p $GOPATH/src/tools.lowes.com/e-dpiac/t7m-platform-org-v2'
+                        sh 'cp -R * $GOPATH/src/tools.lowes.com/e-dpiac/t7m-platform-org-v2/'
+                        sh "cd \$GOPATH/src/tools.lowes.com/e-dpiac/t7m-platform-org-v2/${directory} && go test -timeout 30m ./..."
+                    }
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "find . -type d -name .terraform -exec rm -rfv {} +"
+                    }
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                mail (to: 'DL-DIST-Digital-Platform@lowes.com',
+                        subject: "Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) failed.",
+                        body: "Please visit ${env.BUILD_URL} for further information."
+                );
+            }
+        }
+    }
+}
+
+def terraformPlan(directory) {
+
+    def retCode = sh(script: "cd ${directory} && terraform init  > /dev/null 2>&1 && terraform plan -var-file=variables.tfvars -detailed-exitcode  > /dev/null 2>&1 || echo \$?", returnStdout: true)
+
+    println """@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n ${directory} resource plan start With ${retCode}. \n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
+    if (retCode && retCode != 0) {
+        sh "cd ${directory} && terraform plan -var-file=variables.tfvars"
+
+    } else {
+        println """@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n No changes for ${directory} \n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
+    }
+    println """@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n ${directory} resource plan end. \n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
+    return retCode
+}
+
+def terraformApply(directory) {
+    //Initializing.
+    sh(script: "cd ${directory} && terraform init > /dev/null 2>&1", returnStdout: true)
+    println """@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n ${directory} resource apply start.\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
+    //Applying
+    sh "cd ${directory} && cp $TF_VAR_credentials_path creds.json && terraform apply -input=false -auto-approve -var-file=variables.tfvars "
+    println """@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n ${directory} resource apply end. \n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
+}
