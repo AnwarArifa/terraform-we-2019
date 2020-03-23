@@ -1,0 +1,279 @@
+pipeline {
+    agent none
+    stages {
+        stage('DEV Terraform Plan') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_DEV_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'rm -rf .terraform/ && terraform init --backend-config=dev/backend.tfvars && terraform plan -var-file=dev/variables.tfvars'
+                }
+            }
+          	post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('Manual Judgement DEV') {
+            agent { label 'docker' }
+            steps {
+                timeout(time:45, unit:'MINUTES') {
+                    input("Proceed to DEV Apply?")
+                }
+            }
+        }
+        stage('DEV Terraform Apply') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_DEV_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'terraform init --backend-config=dev/backend.tfvars && terraform apply -input=false -auto-approve -var-file=dev/variables.tfvars'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('DEV Terraform Test') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_DEV_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'mkdir -p $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services'
+                    sh 'cp -R * $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/'
+                    sh 'cd \$GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/ && terraform init -backend-config="dev/backend.tfvars" && go test ./...'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('STG Terraform Plan') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_STG_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'rm -rf .terraform/ && terraform init --backend-config=stg/backend.tfvars && terraform plan -var-file=stg/variables.tfvars'
+                }
+            }
+          	post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('Manual Judgement STG') {
+            agent { label 'docker' }
+            steps {
+                timeout(time:45, unit:'MINUTES') {
+                    input("Proceed to STG Apply?")
+                }
+            }
+        }
+        stage('STG Terraform Apply') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_STG_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'terraform init --backend-config=stg/backend.tfvars && terraform apply -input=false -auto-approve -var-file=stg/variables.tfvars'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('STG Terraform Test') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_STG_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'mkdir -p $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services'
+                    sh 'cp -R * $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/'
+                    sh 'cd \$GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/ && terraform init -backend-config="stg/backend.tfvars" && go test ./...'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('PROD Terraform Plan') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_PRD_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'rm -rf .terraform/ && terraform init --backend-config=prd/backend.tfvars && terraform plan -var-file=prd/variables.tfvars'
+                }
+            }
+          	post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('Manual Judgement PROD') {
+            agent { label 'docker' }
+            steps {
+                timeout(time:45, unit:'MINUTES') {
+                    input("Proceed to PROD Apply?")
+                }
+            }
+        }
+        stage('PROD Terraform Apply') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_PRD_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'terraform init --backend-config=prd/backend.tfvars && terraform apply -input=false -auto-approve -var-file=prd/variables.tfvars'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+        stage('PROD Terraform Test') {
+            agent { 
+                docker {
+                    label 'docker'
+                    image 'gcr.io/gcp-ushi-carbon-svcs-dev/irs-image-terratest:0.11.7-r0'
+                    registryUrl 'https://gcr.io/'
+                    registryCredentialsId 'NPE_GCR_AGENT_CREDENTIALS'
+                    args '-u root:root'
+                } 
+            }
+            environment {
+                GOOGLE_CREDENTIALS = credentials('SERVICES_PRD_IAM_CREDENTIALS')
+            }
+            steps {
+                script {
+                    sh 'mkdir -p $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services'
+                    sh 'cp -R * $GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/'
+                    sh 'cd \$GOPATH/src/tools.lowes.com/e-dpiac/t7m-google-permissions-services/ && terraform init -backend-config="prd/backend.tfvars" && go test ./...'
+                }
+            }
+            post {
+                always {
+                    script {
+                        sh "rm -rf .terraform/"
+                    }
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                mail (to: 'DL-DIST-Digital-Platform@lowes.com',
+                        subject: "Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) failed.",
+                        body: "Please visit ${env.BUILD_URL} for further information."
+                );
+            }
+        }
+    }
+}
